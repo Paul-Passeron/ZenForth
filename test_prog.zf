@@ -1,0 +1,8 @@
+int number
+
+123456 number !
+
+while number @ 0 > do
+    number @ 10 % .
+    number @ 10 / number !
+end
