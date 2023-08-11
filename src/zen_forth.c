@@ -285,28 +285,9 @@ int int_peek(int_stack *stack)
     assert(stack->l > 0);
     return stack->data[stack->l - 1];
 }
-void compile(Program prog, char *filename)
+
+void dump_def(FILE *out)
 {
-    assert(OP_COUNT == 21 && "Exhaustive handling of operations in compile.");
-    int if_counter = 0;
-    int wh_counter = 0;
-    int_stack if_stack;
-    int_stack wh_stack;
-    int_stack scope;
-    scope.l = 0;
-    if_stack.l = 0;
-    wh_stack.l = 0;
-    int iff = 0;
-    int whi = 1;
-
-    Program vars;
-    vars.length = 0;
-    Type var_type = TYPE_BOOL;
-    bool in_var = false;
-
-    FILE *out;
-    out = fopen(filename, "wb");
-    fprintf(out, "section .text\n");
     fprintf(out, "dump:\n");
     fprintf(out, "        mov     r9, -3689348814741910323\n");
     fprintf(out, "        sub     rsp, 40\n");
@@ -339,6 +320,143 @@ void compile(Program prog, char *filename)
     fprintf(out, "        syscall\n");
     fprintf(out, "        add     rsp, 40\n");
     fprintf(out, "        ret\n");
+}
+
+void add_def(FILE *out)
+{
+    fprintf(out, "    ;; ADD\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    add rbx, rax\n");
+    fprintf(out, "    push rbx\n");
+}
+
+void sub_def(FILE *out)
+{
+    fprintf(out, "    ;; SUB\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    sub rbx, rax\n");
+    fprintf(out, "    push rbx\n");
+}
+
+void mul_def(FILE *out)
+{
+    fprintf(out, "    ;; MUL\n");
+    fprintf(out, "    pop rdx\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    mul rdx\n");
+    fprintf(out, "    push rax\n");
+}
+
+void div_def(FILE *out)
+{
+    fprintf(out, "    ;; DIV\n");
+    fprintf(out, "    mov rdx, 0\n");
+    fprintf(out, "    pop rcx\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    div rcx\n");
+    fprintf(out, "    push rax\n");
+}
+
+void mod_def(FILE *out)
+{
+    fprintf(out, "    ;; DIV\n");
+    fprintf(out, "    mov rdx, 0\n");
+    fprintf(out, "    pop rcx\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    div rcx\n");
+    fprintf(out, "    push rdx\n");
+}
+
+void print_def(FILE *out)
+{
+    fprintf(out, "    ;; PRINT\n");
+    fprintf(out, "    pop rdi\n");
+    fprintf(out, "    call dump\n");
+}
+
+void not_def(FILE *out)
+{
+    fprintf(out, "    ;; NOT\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    cmp rax, 0\n");
+    fprintf(out, "    mov rcx, 0\n");
+    fprintf(out, "    mov rdx, 1\n");
+    fprintf(out, "    cmove rcx, rdx\n");
+    fprintf(out, "    push rcx\n");
+}
+
+void dup_def(FILE *out)
+{
+    fprintf(out, "    ;; DUP\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    push rax\n");
+    fprintf(out, "    push rax\n");
+}
+
+void drop_def(FILE *out)
+{
+    fprintf(out, "    ;; DROP\n");
+    fprintf(out, "    pop rax\n");
+}
+
+void swap_def(FILE *out)
+{
+    fprintf(out, "    ;; SWAP\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    push rax\n");
+    fprintf(out, "    push rbx\n");
+}
+
+void equal_def(FILE *out)
+{
+    fprintf(out, "    ;; EQUAL\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    cmp rax, rbx\n");
+    fprintf(out, "    mov rcx, 0\n");
+    fprintf(out, "    mov rdx, 1\n");
+    fprintf(out, "    cmove rcx, rdx\n");
+    fprintf(out, "    push rcx\n");
+}
+
+void l_def(FILE *out)
+{
+    fprintf(out, "    ;; LESS\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    cmp rbx, rax\n");
+    fprintf(out, "    mov rcx, 0\n");
+    fprintf(out, "    mov rdx, 1\n");
+    fprintf(out, "    cmovl rcx, rdx\n");
+    fprintf(out, "    push rcx\n");
+}
+
+void compile(Program prog, char *filename)
+{
+    assert(OP_COUNT == 21 && "Exhaustive handling of operations in compile.");
+    int if_counter = 0;
+    int wh_counter = 0;
+    int_stack if_stack;
+    int_stack wh_stack;
+    int_stack scope;
+    scope.l = 0;
+    if_stack.l = 0;
+    wh_stack.l = 0;
+    int iff = 0;
+    int whi = 1;
+
+    Program vars;
+    vars.length = 0;
+    Type var_type = TYPE_BOOL;
+    bool in_var = false;
+
+    FILE *out;
+    out = fopen(filename, "wb");
+    fprintf(out, "section .text\n");
+    dump_def(out);
     fprintf(out, "\nglobal _start\n");
     fprintf(out, "_start:\n");
 
@@ -377,81 +495,83 @@ void compile(Program prog, char *filename)
         }
         else if (tok.op == OP_ADD)
         {
-            fprintf(out, "    ;; ADD\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    add rbx, rax\n");
-            fprintf(out, "    push rbx\n");
+            add_def(out);
         }
         else if (tok.op == OP_SUB)
         {
-            fprintf(out, "    ;; SUB\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    sub rbx, rax\n");
-            fprintf(out, "    push rbx\n");
+            sub_def(out);
         }
         else if (tok.op == OP_MUL)
         {
-            fprintf(out, "    ;; MUL\n");
-            fprintf(out, "    pop rdx\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    mul rdx\n");
-            fprintf(out, "    push rax\n");
+            mul_def(out);
         }
         else if (tok.op == OP_DIV)
         {
-            fprintf(out, "    ;; DIV\n");
-            fprintf(out, "    mov rdx, 0\n");
-            fprintf(out, "    pop rcx\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    div rcx\n");
-            fprintf(out, "    push rax\n");
+            div_def(out);
         }
         else if (tok.op == OP_MOD)
         {
-            fprintf(out, "    ;; DIV\n");
-            fprintf(out, "    mov rdx, 0\n");
-            fprintf(out, "    pop rcx\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    div rcx\n");
-            fprintf(out, "    push rdx\n");
+            mod_def(out);
         }
         else if (tok.op == OP_PRINT)
         {
-            fprintf(out, "    ;; PRINT\n");
-            fprintf(out, "    pop rdi\n");
-            fprintf(out, "    call dump\n");
+            print_def(out);
         }
         else if (tok.op == OP_NOT)
         {
-            fprintf(out, "    ;; NOT\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    cmp rax, 0\n");
-            fprintf(out, "    mov rcx, 0\n");
-            fprintf(out, "    mov rdx, 1\n");
-            fprintf(out, "    cmove rcx, rdx\n");
-            fprintf(out, "    push rcx\n");
+            not_def(out);
         }
         else if (tok.op == OP_DUP)
         {
-            fprintf(out, "    ;; DUP\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    push rax\n");
-            fprintf(out, "    push rax\n");
+            dup_def(out);
         }
         else if (tok.op == OP_DROP)
         {
-            fprintf(out, "    ;; DROP\n");
-            fprintf(out, "    pop rax\n");
+            drop_def(out);
         }
         else if (tok.op == OP_SWAP)
         {
-            fprintf(out, "    ;; SWAP\n");
+            swap_def(out);
+        }
+        else if (tok.op == OP_EQUAL)
+        {
+            equal_def(out);
+        }
+        else if (tok.op == OP_L)
+        {
+            l_def(out);
+        }
+        else if (tok.op == OP_G)
+        {
+            fprintf(out, "    ;; EQUAL\n");
             fprintf(out, "    pop rax\n");
             fprintf(out, "    pop rbx\n");
+            fprintf(out, "    cmp rbx, rax\n");
+            fprintf(out, "    mov rcx, 0\n");
+            fprintf(out, "    mov rdx, 1\n");
+            fprintf(out, "    cmovg rcx, rdx\n");
+            fprintf(out, "    push rcx\n");
+        }
+        else if (tok.op == OP_INT)
+        {
+            var_type = TYPE_INT;
+            in_var = true;
+        }
+        else if (tok.op == OP_STORE)
+        {
+            // assert(false && "! op is not implemented yet.");
+            fprintf(out, "    ;; STORE\n");
+            fprintf(out, "    pop rbx\n");
+            fprintf(out, "    pop rax\n");
+            fprintf(out, "    mov qword [rbx], rax\n");
+        }
+        else if (tok.op == OP_FETCH)
+        {
+            // assert(false && "@ op is not implemented yet.");
+            fprintf(out, "    ;; FETCH\n");
+            fprintf(out, "    pop rbx\n");
+            fprintf(out, "    mov rax, [rbx]\n");
             fprintf(out, "    push rax\n");
-            fprintf(out, "    push rbx\n");
         }
         else if (tok.op == OP_IF)
         {
@@ -478,39 +598,6 @@ void compile(Program prog, char *filename)
                 fprintf(out, ".WHILE%d:\n", wh_i);
             }
         }
-        else if (tok.op == OP_EQUAL)
-        {
-            fprintf(out, "    ;; EQUAL\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    cmp rax, rbx\n");
-            fprintf(out, "    mov rcx, 0\n");
-            fprintf(out, "    mov rdx, 1\n");
-            fprintf(out, "    cmove rcx, rdx\n");
-            fprintf(out, "    push rcx\n");
-        }
-        else if (tok.op == OP_L)
-        {
-            fprintf(out, "    ;; EQUAL\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    cmp rbx, rax\n");
-            fprintf(out, "    mov rcx, 0\n");
-            fprintf(out, "    mov rdx, 1\n");
-            fprintf(out, "    cmovl rcx, rdx\n");
-            fprintf(out, "    push rcx\n");
-        }
-        else if (tok.op == OP_G)
-        {
-            fprintf(out, "    ;; EQUAL\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    cmp rbx, rax\n");
-            fprintf(out, "    mov rcx, 0\n");
-            fprintf(out, "    mov rdx, 1\n");
-            fprintf(out, "    cmovg rcx, rdx\n");
-            fprintf(out, "    push rcx\n");
-        }
         else if (tok.op == OP_WHILE)
         {
             fprintf(out, "    ;; WHILE\n");
@@ -525,27 +612,6 @@ void compile(Program prog, char *filename)
             fprintf(out, "    pop rax\n");
             fprintf(out, "    cmp rax, 0\n");
             fprintf(out, "    je .WHILE%d\n", int_peek(&wh_stack));
-        }
-        else if (tok.op == OP_INT)
-        {
-            var_type = TYPE_INT;
-            in_var = true;
-        }
-        else if (tok.op == OP_STORE)
-        {
-            // assert(false && "! op is not implemented yet.");
-            fprintf(out, "    ;; STORE\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    mov qword [rbx], rax\n");
-        }
-        else if (tok.op == OP_FETCH)
-        {
-            // assert(false && "@ op is not implemented yet.");
-            fprintf(out, "    ;; FETCH\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    mov rax, [rbx]\n");
-            fprintf(out, "    push rax\n");
         }
     }
     fprintf(out, "    ;; EXIT PROGRAM\n");
