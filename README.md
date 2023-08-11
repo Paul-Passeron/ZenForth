@@ -1,6 +1,8 @@
 # ZenForth
 
 SImple stack-based Forth-like language implemented in C.
+This porject is inspired by Tsoding's Porth: https://gitlab.com/tsoding/porth
+And uses his string-view implementation: https://github.com/tsoding/sv
 
 # Quickstart:
 Compile the compiler using cc :
