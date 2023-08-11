@@ -539,8 +539,6 @@ void compile(Program prog, char *filename)
     int iff = 0;
     int whi = 1;
 
-    Program vars;
-    vars.length = 0;
     Type var_type = TYPE_BOOL;
     bool in_var = false;
 
@@ -574,28 +572,21 @@ void compile(Program prog, char *filename)
                 if (var_type == TYPE_INT)
                 {
                     int_push(&loc_var_sizes, 16);
-                    // int_push(&loc_var_sizes, (int)sizeof(int));
                 }
                 else if (var_type == TYPE_BOOL)
                 {
-                    // int_push(&loc_var_sizes, (int)sizeof(bool));
                     int_push(&loc_var_sizes, 16);
                 }
                 in_var = false;
                 tok.type = var_type;
-                // tok.cross_ref = loc_var_n.data[loc_var_n.l - 1];
                 loc_var_n.data[loc_var_n.l - 1]++;
                 push(&loc_vars, tok);
-                push(&vars, tok); // Shouldn't be needing that anymore
             }
             else if (!is_sv_num(tok.lexeme) && tok.type != TYPE_BOOL)
             {
-                // We pushed a variable (more so its pointer onto the stack).
-                // Should change that in order to accomodate for local variables.
                 fprintf(out, "    ;; PUSH\n");
                 int offset = get_var_offset(tok.lexeme, loc_vars, loc_var_sizes);
                 fprintf(out, "    mov rax, vars + %d\n", offset);
-                // fprintf(out, "    mov rax, " SV_Fmt "\n", SV_Arg(tok.lexeme));
                 fprintf(out, "    push rax\n");
             }
             else
@@ -731,20 +722,7 @@ void compile(Program prog, char *filename)
     exit_def(out);
 
     fprintf(out, "section .data\n");
-    // for (int i = 0; i < vars.length; i++)
-    // {
-    //     Token tok = vars.toks[i];
-    //     if (tok.type == TYPE_INT)
-    //     {
-    //         fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
-    //         fprintf(out, "    dw 0, 0, 0, 0");
-    //     }
-    //     else if (tok.type == TYPE_BOOL)
-    //     {
-    //         fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
-    //         fprintf(out, "    db 0");
-    //     }
-    // }
+
     fprintf(out, "vars:\n");
     fprintf(out, "TIMES %d db 0\n", max_loc_var);
     fclose(out);
@@ -753,12 +731,11 @@ void compile(Program prog, char *filename)
 void usage(void)
 {
     printf("./zf <input filename> <output filename>\n");
-    // printf("./zf <input filename>\n");
 }
 
 void sysprintf(const char *format, ...)
 {
-    char command[1024]; // Adjust the size as needed
+    char command[100];
     va_list args;
 
     va_start(args, format);
