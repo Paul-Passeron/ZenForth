@@ -1,8 +1,16 @@
 int number
 
-123456 number !
+0 number !
 
-while number @ 0 > do
-    number @ 10 % .
-    number @ 10 / number !
+while number @ 10 < do
+    int fact
+    int temp number @ temp !
+    1 fact !
+    while number @ 1 > do
+        number @ fact @ * fact !
+        number @ 1 - number !
+    end
+    temp @ 1 + number !
+    fact @ .
 end
+

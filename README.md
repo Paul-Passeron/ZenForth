@@ -69,6 +69,8 @@ int <name_of_variable>
 
 # store the value on top of the stack in the variable:
 <name_of_variable> !
+
+# Be careful, scope rules apply for variables, like in any other language.
 ```
 
 
@@ -84,3 +86,6 @@ while number @ 0 > do
     number @ 10 / number !
 end
 ```
+
+## Notes
+- When procedures will be availaible, you certainly won't be able to access any kind of global variables (except maybe some marked as such), only the stack. Parameters are pushed onto the stack by the caller.

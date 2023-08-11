@@ -226,6 +226,18 @@ Program parseProg(String_View *lexemes, int count)
     return prog;
 }
 
+bool sv_contains(String_View sv, char c)
+{
+    for (size_t i = 0; i < sv.count; ++i)
+    {
+        if (sv.data[i] == c)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 Program get_prog_from_file(char *filename)
 {
     String_View lexemes[100];
@@ -233,16 +245,28 @@ Program get_prog_from_file(char *filename)
     String_View file = read_file(filename);
     String_View temp;
     String_View delim;
+    bool in_comment = false;
     while (l_i < PROG_MAX && file.count > 0)
     {
         if (file.count == 0)
             break;
         temp = sv_chop_left_while(&file, is_not_separator);
         delim = sv_chop_left_while_separator(&file, is_separator);
-        if (!is_sv_useless(temp))
-            lexemes[l_i++] = temp;
-        if (!is_sv_useless(delim))
-            lexemes[l_i++] = delim;
+        if (in_comment && temp.count > 0 && temp.data[0] == '\n')
+            in_comment = false;
+        if (in_comment && delim.count > 0 && delim.data[0] == '\n')
+            in_comment = false;
+        if (sv_contains(temp, '#'))
+            in_comment = true;
+        if (sv_contains(delim, '#'))
+            in_comment = true;
+        if (!in_comment)
+        {
+            if (!is_sv_useless(temp))
+                lexemes[l_i++] = temp;
+            if (!is_sv_useless(delim))
+                lexemes[l_i++] = delim;
+        }
     }
     Program prog = parseProg(lexemes, l_i);
     return prog;
@@ -450,7 +474,7 @@ void store_def(FILE *out)
     fprintf(out, "    ;; STORE\n");
     fprintf(out, "    pop rbx\n");
     fprintf(out, "    pop rax\n");
-    fprintf(out, "    mov qword [rbx], rax\n");
+    fprintf(out, "    mov [rbx], rax\n");
 }
 void fetch_def(FILE *out)
 {
@@ -467,9 +491,43 @@ void exit_def(FILE *out)
     fprintf(out, "    mov rdi, 0\n");
     fprintf(out, "    syscall\n");
 }
+
+int get_total_var_size(int_stack sizes)
+{
+    int acc = 0;
+    while (sizes.l > 0)
+    {
+        acc += int_pop(&sizes);
+    }
+    return acc;
+}
+
+int get_var_offset(String_View id, Program vars, int_stack sizes)
+{
+    int offset = 0;
+    int length = get_total_var_size(sizes);
+
+    Token var;
+    while (vars.length > 0)
+    {
+        offset += int_pop(&sizes);
+        var = pop(&vars);
+        if (sv_eq(id, var.lexeme))
+        {
+            break;
+        }
+    }
+    if (!sv_eq(id, var.lexeme))
+    {
+        printf("ERROR: local variable `" SV_Fmt "` is not declared in the current scope.\n", SV_Arg(id));
+    }
+    return length - offset;
+}
+
 void compile(Program prog, char *filename)
 {
     assert(OP_COUNT == 21 && "Exhaustive handling of operations in compile.");
+
     int if_counter = 0;
     int wh_counter = 0;
     int_stack if_stack;
@@ -486,6 +544,14 @@ void compile(Program prog, char *filename)
     Type var_type = TYPE_BOOL;
     bool in_var = false;
 
+    int_stack loc_var_sizes;
+    int_stack loc_var_n;
+    Program loc_vars;
+    loc_var_sizes.l = 0;
+    loc_var_n.l = 0;
+    loc_vars.length = 0;
+    int max_loc_var = 0;
+
     FILE *out;
     out = fopen(filename, "wb");
     fprintf(out, "section .text\n");
@@ -495,20 +561,41 @@ void compile(Program prog, char *filename)
 
     for (int i = 0; i < prog.length; ++i)
     {
+        int total_size = get_total_var_size(loc_var_sizes);
+        if (total_size > max_loc_var)
+        {
+            max_loc_var = total_size;
+        }
         Token tok = prog.toks[i];
         if (tok.op == OP_PUSH)
         {
             if (in_var && !is_sv_num(tok.lexeme))
             {
+                if (var_type == TYPE_INT)
+                {
+                    int_push(&loc_var_sizes, 16);
+                    // int_push(&loc_var_sizes, (int)sizeof(int));
+                }
+                else if (var_type == TYPE_BOOL)
+                {
+                    // int_push(&loc_var_sizes, (int)sizeof(bool));
+                    int_push(&loc_var_sizes, 16);
+                }
                 in_var = false;
                 tok.type = var_type;
-                push(&vars, tok);
+                // tok.cross_ref = loc_var_n.data[loc_var_n.l - 1];
+                loc_var_n.data[loc_var_n.l - 1]++;
+                push(&loc_vars, tok);
+                push(&vars, tok); // Shouldn't be needing that anymore
             }
             else if (!is_sv_num(tok.lexeme) && tok.type != TYPE_BOOL)
             {
                 // We pushed a variable (more so its pointer onto the stack).
+                // Should change that in order to accomodate for local variables.
                 fprintf(out, "    ;; PUSH\n");
-                fprintf(out, "    mov rax, " SV_Fmt "\n", SV_Arg(tok.lexeme));
+                int offset = get_var_offset(tok.lexeme, loc_vars, loc_var_sizes);
+                fprintf(out, "    mov rax, vars + %d\n", offset);
+                // fprintf(out, "    mov rax, " SV_Fmt "\n", SV_Arg(tok.lexeme));
                 fprintf(out, "    push rax\n");
             }
             else
@@ -599,10 +686,17 @@ void compile(Program prog, char *filename)
             fprintf(out, "    je .IF%d\n", if_counter);
             int_push(&if_stack, if_counter);
             int_push(&scope, iff);
+            int_push(&loc_var_n, 0);
             if_counter++;
         }
         else if (tok.op == OP_END)
         {
+            int count = int_pop(&loc_var_n);
+            for (int var_n = 0; var_n < count; var_n++)
+            {
+                int_pop(&loc_var_sizes);
+                pop(&loc_vars);
+            }
             fprintf(out, "    ;; END\n");
             int a = int_pop(&scope);
             if (a == iff)
@@ -622,6 +716,8 @@ void compile(Program prog, char *filename)
             fprintf(out, ".DO%d:\n", wh_counter);
             int_push(&wh_stack, wh_counter);
             int_push(&scope, whi);
+            int_push(&loc_var_n, 0);
+
             wh_counter++;
         }
         else if (tok.op == OP_DO)
@@ -635,20 +731,22 @@ void compile(Program prog, char *filename)
     exit_def(out);
 
     fprintf(out, "section .data\n");
-    for (int i = 0; i < vars.length; i++)
-    {
-        Token tok = vars.toks[i];
-        if (tok.type == TYPE_INT)
-        {
-            fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
-            fprintf(out, "    dw 0, 0, 0, 0");
-        }
-        else if (tok.type == TYPE_BOOL)
-        {
-            fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
-            fprintf(out, "    db 0");
-        }
-    }
+    // for (int i = 0; i < vars.length; i++)
+    // {
+    //     Token tok = vars.toks[i];
+    //     if (tok.type == TYPE_INT)
+    //     {
+    //         fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
+    //         fprintf(out, "    dw 0, 0, 0, 0");
+    //     }
+    //     else if (tok.type == TYPE_BOOL)
+    //     {
+    //         fprintf(out, SV_Fmt ":\n", SV_Arg(tok.lexeme));
+    //         fprintf(out, "    db 0");
+    //     }
+    // }
+    fprintf(out, "vars:\n");
+    fprintf(out, "TIMES %d db 0\n", max_loc_var);
     fclose(out);
 }
 
