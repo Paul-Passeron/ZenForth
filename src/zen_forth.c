@@ -434,6 +434,39 @@ void l_def(FILE *out)
     fprintf(out, "    push rcx\n");
 }
 
+void g_def(FILE *out)
+{
+    fprintf(out, "    ;; GREATER\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    cmp rbx, rax\n");
+    fprintf(out, "    mov rcx, 0\n");
+    fprintf(out, "    mov rdx, 1\n");
+    fprintf(out, "    cmovg rcx, rdx\n");
+    fprintf(out, "    push rcx\n");
+}
+void store_def(FILE *out)
+{
+    fprintf(out, "    ;; STORE\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    pop rax\n");
+    fprintf(out, "    mov qword [rbx], rax\n");
+}
+void fetch_def(FILE *out)
+{
+    fprintf(out, "    ;; FETCH\n");
+    fprintf(out, "    pop rbx\n");
+    fprintf(out, "    mov rax, [rbx]\n");
+    fprintf(out, "    push rax\n");
+}
+
+void exit_def(FILE *out)
+{
+    fprintf(out, "    ;; EXIT PROGRAM\n");
+    fprintf(out, "    mov rax, 60\n");
+    fprintf(out, "    mov rdi, 0\n");
+    fprintf(out, "    syscall\n");
+}
 void compile(Program prog, char *filename)
 {
     assert(OP_COUNT == 21 && "Exhaustive handling of operations in compile.");
@@ -543,14 +576,7 @@ void compile(Program prog, char *filename)
         }
         else if (tok.op == OP_G)
         {
-            fprintf(out, "    ;; EQUAL\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    cmp rbx, rax\n");
-            fprintf(out, "    mov rcx, 0\n");
-            fprintf(out, "    mov rdx, 1\n");
-            fprintf(out, "    cmovg rcx, rdx\n");
-            fprintf(out, "    push rcx\n");
+            g_def(out);
         }
         else if (tok.op == OP_INT)
         {
@@ -559,19 +585,11 @@ void compile(Program prog, char *filename)
         }
         else if (tok.op == OP_STORE)
         {
-            // assert(false && "! op is not implemented yet.");
-            fprintf(out, "    ;; STORE\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    pop rax\n");
-            fprintf(out, "    mov qword [rbx], rax\n");
+            store_def(out);
         }
         else if (tok.op == OP_FETCH)
         {
-            // assert(false && "@ op is not implemented yet.");
-            fprintf(out, "    ;; FETCH\n");
-            fprintf(out, "    pop rbx\n");
-            fprintf(out, "    mov rax, [rbx]\n");
-            fprintf(out, "    push rax\n");
+            fetch_def(out);
         }
         else if (tok.op == OP_IF)
         {
@@ -614,10 +632,7 @@ void compile(Program prog, char *filename)
             fprintf(out, "    je .WHILE%d\n", int_peek(&wh_stack));
         }
     }
-    fprintf(out, "    ;; EXIT PROGRAM\n");
-    fprintf(out, "    mov rax, 60\n");
-    fprintf(out, "    mov rdi, 0\n");
-    fprintf(out, "    syscall\n");
+    exit_def(out);
 
     fprintf(out, "section .data\n");
     for (int i = 0; i < vars.length; i++)
