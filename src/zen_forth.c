@@ -113,7 +113,7 @@ int sv_to_int(String_View sv)
 Token_Op type_of_lexeme(String_View lexeme)
 {
     assert(lexeme.count > 0);
-    assert(OP_COUNT == 21 && "Exhaustive handling of operations in type_of_lexeme.");
+    assert(OP_COUNT == 22 && "Exhaustive handling of operations in type_of_lexeme.");
     if (lexeme.count == 1)
     {
         if (lexeme.data[0] == '+')
@@ -157,6 +157,8 @@ Token_Op type_of_lexeme(String_View lexeme)
         return OP_END;
     if (sv_eq(lexeme, sv_from_cstr("int")))
         return OP_INT;
+    if (sv_eq(lexeme, sv_from_cstr("proc")))
+        return OP_PROC;
     return OP_PUSH;
 }
 
@@ -510,6 +512,7 @@ int get_var_offset(String_View id, Program vars, int_stack sizes)
     Token var;
     while (vars.length > 0)
     {
+
         offset += int_pop(&sizes);
         var = pop(&vars);
         if (sv_eq(id, var.lexeme))
@@ -519,14 +522,117 @@ int get_var_offset(String_View id, Program vars, int_stack sizes)
     }
     if (!sv_eq(id, var.lexeme))
     {
-        printf("ERROR: local variable `" SV_Fmt "` is not declared in the current scope.\n", SV_Arg(id));
+        fprintf(stderr, "ERROR: local variable `" SV_Fmt "` is not declared in the current scope.\n", SV_Arg(id));
     }
     return length - offset;
 }
 
-void compile(Program prog, char *filename)
+typedef struct
 {
-    assert(OP_COUNT == 21 && "Exhaustive handling of operations in compile.");
+    Program progs[MAX_PROC_NUM];
+    size_t l;
+} prog_stack;
+
+void prog_push(prog_stack *p, Program prog)
+{
+    assert(p->l < MAX_PROC_NUM - 1);
+    p->progs[p->l++] = prog;
+}
+
+Program prog_pop(prog_stack *p)
+{
+    assert(p->l > 0);
+    return p->progs[--p->l];
+}
+
+prog_stack get_procs_from_prog(Program prog)
+{
+    prog_stack procs;
+    procs.l = 0;
+    int scope = 0;
+    bool in_proc = false;
+    Program curr_prog;
+    curr_prog.length = 0;
+    for (int i = 0; i < prog.length; ++i)
+    {
+
+        Token tok = prog.toks[i];
+        push(&curr_prog, tok);
+        if (tok.op == OP_PROC)
+        {
+            scope++;
+            if (in_proc)
+            {
+                fprintf(stderr, "Error: Can't declare procedure inside of another procedure.\n");
+            }
+            in_proc = true;
+        }
+        else if (tok.op == OP_IF || tok.op == OP_WHILE)
+        {
+            scope++;
+        }
+        else if (tok.op == OP_END)
+        {
+            scope--;
+            if (scope == 0)
+            {
+                in_proc = false;
+                prog_push(&procs, curr_prog);
+                curr_prog.length = 0;
+            }
+        }
+    }
+    return procs;
+}
+
+Program get_procless_prog(Program prog)
+{
+    int scope = 0;
+    bool in_proc = false;
+    Program toret;
+    toret.length = 0;
+    for (int i = 0; i < prog.length; ++i)
+    {
+        Token tok = prog.toks[i];
+
+        if (tok.op == OP_PROC)
+        {
+            scope++;
+            in_proc = true;
+        }
+        if (!in_proc)
+        {
+            push(&toret, tok);
+        }
+        if (tok.op == OP_IF || tok.op == OP_WHILE)
+        {
+            scope++;
+        }
+        if (tok.op == OP_END)
+        {
+            scope--;
+            if (scope == 0 && in_proc)
+            {
+                in_proc = false;
+            }
+        }
+    }
+    return toret;
+}
+
+bool sv_in_arr(String_View sv, String_View *arr, int length)
+{
+    for (int i = 0; i < length; ++i)
+    {
+        if (sv_eq(sv, arr[i]))
+            return true;
+    }
+    return false;
+}
+
+int write_asm(Program prog, FILE *out, String_View *names, int l)
+{
+    assert(OP_COUNT == 22 && "Exhaustive handling of operations in compile.");
 
     int if_counter = 0;
     int wh_counter = 0;
@@ -538,7 +644,7 @@ void compile(Program prog, char *filename)
     wh_stack.l = 0;
     int iff = 0;
     int whi = 1;
-
+    int pro = 2;
     Type var_type = TYPE_BOOL;
     bool in_var = false;
 
@@ -550,44 +656,62 @@ void compile(Program prog, char *filename)
     loc_vars.length = 0;
     int max_loc_var = 0;
 
-    FILE *out;
-    out = fopen(filename, "wb");
-    fprintf(out, "section .text\n");
-    dump_def(out);
-    fprintf(out, "\nglobal _start\n");
-    fprintf(out, "_start:\n");
-
-    for (int i = 0; i < prog.length; ++i)
+    // bool is_proc = false;
+    int i = 0;
+    if (prog.toks[0].op == OP_PROC)
+    {
+        int_push(&loc_var_n, 0);
+        int_push(&scope, pro);
+        // is_proc = true;
+        i = 2;
+    }
+    for (; i < prog.length; ++i)
     {
         int total_size = get_total_var_size(loc_var_sizes);
+        Token tok = prog.toks[i];
+
         if (total_size > max_loc_var)
         {
             max_loc_var = total_size;
         }
-        Token tok = prog.toks[i];
         if (tok.op == OP_PUSH)
         {
-            if (in_var && !is_sv_num(tok.lexeme))
+            if (sv_in_arr(tok.lexeme, names, l))
             {
-                if (var_type == TYPE_INT)
+                fprintf(out, "    ;; CALL " SV_Fmt "\n", SV_Arg(tok.lexeme));
+                fprintf(out, "    mov rax, rsp\n");
+                fprintf(out, "    mov rsp, [ret_stack_rsp]\n");
+                fprintf(out, "    call proc_" SV_Fmt "\n", SV_Arg(tok.lexeme));
+                fprintf(out, "    mov [ret_stack_rsp], rsp\n");
+                fprintf(out, "    mov rsp, rax\n");
+            }
+            else if (in_var && !is_sv_num(tok.lexeme))
+            {
+
+                if (!sv_in_arr(tok.lexeme, names, l))
                 {
-                    int_push(&loc_var_sizes, 16);
+                    if (var_type == TYPE_INT)
+                    {
+                        int_push(&loc_var_sizes, 16);
+                    }
+                    else if (var_type == TYPE_BOOL)
+                    {
+                        int_push(&loc_var_sizes, 16);
+                    }
+                    in_var = false;
+                    tok.type = var_type;
+                    loc_var_n.data[loc_var_n.l - 1]++;
+                    push(&loc_vars, tok);
                 }
-                else if (var_type == TYPE_BOOL)
-                {
-                    int_push(&loc_var_sizes, 16);
-                }
-                in_var = false;
-                tok.type = var_type;
-                loc_var_n.data[loc_var_n.l - 1]++;
-                push(&loc_vars, tok);
             }
             else if (!is_sv_num(tok.lexeme) && tok.type != TYPE_BOOL)
             {
                 fprintf(out, "    ;; PUSH\n");
                 int offset = get_var_offset(tok.lexeme, loc_vars, loc_var_sizes);
-                fprintf(out, "    mov rax, vars + %d\n", offset);
-                fprintf(out, "    push rax\n");
+                fprintf(out, "    mov rbx, vars + %d\n", offset);
+                fprintf(out, "    mov rax, [proc_depth]\n");
+                fprintf(out, "    add rbx, rax\n");
+                fprintf(out, "    push rbx\n");
             }
             else
             {
@@ -719,13 +843,62 @@ void compile(Program prog, char *filename)
             fprintf(out, "    je .WHILE%d\n", int_peek(&wh_stack));
         }
     }
+    return 0;
+}
+
+int get_max_loc_var(Program prog)
+{
+    (void)prog;
+    return 16;
+}
+
+int compile(Program src, char *filename)
+{
+    Program main = get_procless_prog(src);
+    prog_stack procs = get_procs_from_prog(src);
+    String_View procs_names[procs.l];
+    int num_procs = procs.l;
+    for (size_t i = 0; i < procs.l; i++)
+    {
+        procs_names[i] = procs.progs[i].toks[1].lexeme;
+    }
+    int max_loc_var = get_max_loc_var(src);
+    FILE *out;
+    out = fopen(filename, "wb");
+    fprintf(out, "format ELF64 executable 3\n");
+    fprintf(out, "segment readable executable\n");
+    dump_def(out);
+    for (size_t i = 0; i < procs.l; ++i)
+    {
+        Program proc = procs.progs[i];
+        String_View proc_name = proc.toks[1].lexeme;
+        fprintf(out, "proc_" SV_Fmt ":\n", SV_Arg(proc_name));
+        fprintf(out, "    mov [ret_stack_rsp], rsp\n");
+        fprintf(out, "    mov rsp, rax\n");
+
+        write_asm(proc, out, procs_names, num_procs);
+
+        fprintf(out, "    mov rax, rsp\n");
+        fprintf(out, "    mov rsp, [ret_stack_rsp]\n");
+        fprintf(out, "    add rsp, 0\n");
+        fprintf(out, "    ret\n");
+    }
+    fprintf(out, "\nentry start\n");
+
+    fprintf(out, "start:\n");
+    fprintf(out, "    mov rax, ret_stack_end\n");
+    fprintf(out, "    mov [ret_stack_rsp], rax\n");
+    write_asm(main, out, procs_names, num_procs);
     exit_def(out);
+    fprintf(out, "segment readable writable\n");
+    fprintf(out, "ret_stack_rsp: rq 1\n");
+    fprintf(out, "ret_stack: rb 65536\n");
+    fprintf(out, "ret_stack_end:\n");
 
-    fprintf(out, "section .data\n");
-
-    fprintf(out, "vars:\n");
-    fprintf(out, "TIMES %d db 0\n", max_loc_var);
+    fprintf(out, "proc_depth: db 0\n");
+    fprintf(out, "vars: rb %d\n", max_loc_var * MAX_REC_DEPTH);
     fclose(out);
+    return 0;
 }
 
 void usage(void)
@@ -745,12 +918,12 @@ void sysprintf(const char *format, ...)
     system(command);
 }
 
-void compile_easy_fn(Program prog, char *filename)
+int compile_easy_fn(Program prog, char *filename)
 {
     char *output = malloc(sizeof(filename) + 4 * sizeof(char));
 
     sprintf(output, "%s.asm", filename);
-    compile(prog, output);
+    return compile(prog, output);
 }
 
 int main(int argc, char **argv)
@@ -767,12 +940,15 @@ int main(int argc, char **argv)
         usage();
         return -1;
     }
-    char *out = argv[2];
-
     Program prog = get_prog_from_file(argv[1]);
-    compile_easy_fn(prog, out);
-    sysprintf("nasm -felf64 %s.asm -o %s.o", out, out);
-    sysprintf("ld -o %s %s.o", out, out);
+    if (compile_easy_fn(prog, argv[2]) != 0)
+    {
+        return -1;
+    }
+    sysprintf("fasm -m 524288 %s.asm  %s", argv[2], argv[2]);
+    sysprintf("chmod +x %s", argv[2], argv[2]);
+
+    // sysprintf("ld -o %s %s.o", argv[2], argv[2]);
 
     return 0;
 }

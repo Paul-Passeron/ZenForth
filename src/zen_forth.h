@@ -4,7 +4,9 @@
 #include "./sv.h"
 
 #define PROG_MAX 100
-
+#define MAX_PROCS 100
+#define MAX_REC_DEPTH 100
+#define MAX_PROC_NUM 100
 typedef struct {
   int col;
   int line;
@@ -33,6 +35,7 @@ typedef enum {
   OP_INT,
   OP_STORE,
   OP_FETCH,
+  OP_PROC,
   OP_COUNT,
 } Token_Op;
 
@@ -73,5 +76,5 @@ void push(Program *program, Token token);
 Token pop(Program *program);
 Token peek(Program *program);
 Token void_tok(void);
-void compile(Program prog, char *filename);
+int compile(Program prog, char *filename);
 void sysprintf(const char *format, ...);
