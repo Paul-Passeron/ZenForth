@@ -1,0 +1,17 @@
+proc a
+    int a1
+    int a2
+    int a3
+    1 a1 !
+    2 a2 !
+    3 a3 !
+    a1 @ .
+    a2 @ .
+    a3 @ .
+end
+int l 10 l !
+
+l @ .
+a
+l @ .
+
