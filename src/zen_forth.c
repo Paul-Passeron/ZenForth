@@ -115,7 +115,7 @@ int sv_to_int(String_View sv)
 Token_Op type_of_lexeme(String_View lexeme)
 {
     assert(lexeme.count > 0);
-    assert(OP_COUNT == 22 && "Exhaustive handling of operations in type_of_lexeme.");
+    assert(OP_COUNT == 23 && "Exhaustive handling of operations in type_of_lexeme.");
     if (lexeme.count == 1)
     {
         if (lexeme.data[0] == '+')
@@ -161,6 +161,8 @@ Token_Op type_of_lexeme(String_View lexeme)
         return OP_INT;
     if (sv_eq(lexeme, sv_from_cstr("proc")))
         return OP_PROC;
+    if (sv_eq(lexeme, sv_from_cstr("arr")))
+        return OP_ARR;
     return OP_PUSH;
 }
 
@@ -205,6 +207,7 @@ Program parseProg(String_View *lexemes, int count)
         pos.line = 0;
         pos.filename = sv_from_cstr("");
         prog.toks[prog.length].lexeme = lexemes[i];
+        prog.toks[prog.length].num = i;
         if (is_sv_num(prog.toks[prog.length].lexeme))
         {
             prog.toks[prog.length].type = TYPE_INT;
@@ -275,6 +278,53 @@ Program get_prog_from_file(char *filename)
     Program prog = parseProg(lexemes, l_i);
     return prog;
 }
+
+// void simulate(Program prog, int begin, int end)
+// {
+//     int_stack stack;
+//     stack.l = 0;
+//     int vars[100];
+//     int scope_cursor = 0;
+//     String_View lexemes[100];
+//     bool in_var = true;
+
+//     // Able to simulate a small subset of the language, to determine array length, primarly.
+//     for (int i = begin; i < end; i++)
+//     {
+//         Token tok = prog.toks[i];
+//         if (tok.op == OP_ADD)
+//         {
+//             int a = int_pop(&stack);
+//             int b = int_pop(&stack);
+//             int_push(&stack, a + b);
+//         }
+//         else if (tok.op == OP_MUL)
+//         {
+//             int a = int_pop(&stack);
+//             int b = int_pop(&stack);
+//             int_push(&stack, a * b);
+//         }
+//         else if (tok.op == OP_DIV)
+//         {
+//             int a = int_pop(&stack);
+//             int b = int_pop(&stack);
+//             int_push(&stack, b / a);
+//         }
+//         else if (tok.op == OP_MOD)
+//         {
+//             int a = int_pop(&stack);
+//             int b = int_pop(&stack);
+//             int_push(&stack, b % a);
+//         }
+//         else if (tok.op == OP_DUP)
+//         {
+//             int_push(&stack, int_peek(&stack));
+//         }
+//         else if (tok.op == OP_INT)
+//         {
+//         }
+//     }
+// }
 
 String_View int_to_sv(int a)
 {
@@ -650,7 +700,7 @@ void print_int_stack(int_stack s)
 }
 int write_asm(Program prog, FILE *out, String_View *names, int l)
 {
-    assert(OP_COUNT == 22 && "Exhaustive handling of operations in compile.");
+    assert(OP_COUNT == 23 && "Exhaustive handling of operations in compile.");
 
     int if_counter = 0;
     int wh_counter = 0;
@@ -665,7 +715,8 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
     int pro = 2;
     Type var_type = TYPE_BOOL;
     bool in_var = false;
-
+    bool in_buff = false;
+    int buff_size = 0;
     int_stack loc_var_sizes;
     int_stack loc_var_n;
     Program loc_vars;
@@ -692,8 +743,13 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
         {
             max_loc_var = total_size;
         }
+        if (tok.op == OP_ARR)
+        {
+            in_buff = true;
+        }
         if (tok.op == OP_PUSH)
         {
+
             if (sv_in_arr(tok.lexeme, names, l))
             {
                 int_push(&loc_var_n, 0);
@@ -710,24 +766,45 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
 
                 if (!sv_in_arr(tok.lexeme, names, l))
                 {
-                    if (var_type == TYPE_INT)
+                    if (!in_buff)
                     {
-                        int_push(&loc_var_sizes, 16);
-                        fprintf(out, "    ;; Declare local variable\n");
-                        fprintf(out, "    push rbx\n");
-                        fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
-                        fprintf(out, "    add rbx, %d\n", 16);
-                        fprintf(out, "    mov [scope_stack_rsp], rbx\n");
-                        fprintf(out, "    pop rbx\n");
+                        if (var_type == TYPE_INT)
+                        {
+                            int_push(&loc_var_sizes, 16);
+                            fprintf(out, "    ;; Declare local variable\n");
+                            fprintf(out, "    push rbx\n");
+                            fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
+                            fprintf(out, "    add rbx, %d\n", 16);
+                            fprintf(out, "    mov [scope_stack_rsp], rbx\n");
+                            fprintf(out, "    pop rbx\n");
+                        }
+                        in_var = false;
+                        tok.type = var_type;
+                        loc_var_n.data[loc_var_n.l - 1]++;
+                        push(&loc_vars, tok);
                     }
-                    else if (var_type == TYPE_BOOL)
+                    else
                     {
-                        int_push(&loc_var_sizes, 16);
+                        if (var_type == TYPE_INT)
+                        {
+                            int_push(&loc_var_sizes, 16 * buff_size);
+                            fprintf(out, "    ;; Declare local variable\n");
+                            fprintf(out, "    pop rdx\n");
+                            fprintf(out, "    push rbx\n");
+                            fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
+                            // fprintf(out, "    push rax\n");
+                            fprintf(out, "    mov rax, 16\n");
+                            fprintf(out, "    mul rdx\n");
+                            fprintf(out, "    add rbx, rax\n");
+                            fprintf(out, "    mov [scope_stack_rsp], rbx\n");
+                            fprintf(out, "    pop rbx\n");
+                        }
+                        in_var = false;
+                        tok.type = var_type;
+                        in_buff = false;
+                        loc_var_n.data[loc_var_n.l - 1]++;
+                        push(&loc_vars, tok);
                     }
-                    in_var = false;
-                    tok.type = var_type;
-                    loc_var_n.data[loc_var_n.l - 1]++;
-                    push(&loc_vars, tok);
                 }
             }
             else if (!is_sv_num(tok.lexeme) && tok.type != TYPE_BOOL)
@@ -743,6 +820,10 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
                 fprintf(out, "    ;; PUSH\n");
                 if (tok.type == TYPE_INT)
                 {
+                    if (in_buff)
+                    {
+                        buff_size += *(int *)tok.data;
+                    }
                     fprintf(out, "    push %d\n", *(int *)tok.data);
                 }
                 else if (tok.type == TYPE_BOOL && sv_eq(tok.lexeme, sv_from_cstr("true")))
@@ -825,7 +906,7 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
             int_push(&if_stack, if_counter);
             int_push(&scope, iff);
             int_push(&loc_var_n, 0);
-            if_counter++;
+            if_counter = tok.num;
         }
         else if (tok.op == OP_END)
         {
@@ -862,7 +943,7 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
             int_push(&scope, whi);
             int_push(&loc_var_n, 0);
 
-            wh_counter++;
+            wh_counter = tok.num;
         }
         else if (tok.op == OP_DO)
         {
@@ -878,7 +959,7 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
 int get_max_loc_var(Program prog)
 {
     (void)prog;
-    return 16;
+    return 160;
 }
 
 int compile(Program src, char *filename)

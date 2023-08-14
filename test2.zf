@@ -1,0 +1,39 @@
+proc at
+    int ptr
+    int index
+    index ! ptr !
+    ptr @ index @ 16 * -
+end
+
+
+proc print_array
+    int length
+    int ptr
+    length ! ptr !
+    int index 0 index !
+    while index @ length @ < do
+        ptr @ index @ at @ .
+        index @ 1 + index !
+    end
+end
+
+proc main
+    int arr_length
+    5 arr_length !
+    arr arr_length @ int array
+    int index 0 index !
+    while index @ arr_length @ < do
+        index @ .
+        int ptr
+        array index @ at 
+        ptr !
+        index @ 2 * ptr @ !
+        index @ 1 + index !
+    end
+    1111 .
+    0 index !
+    while index @ arr_length @ < do
+        array index @ at @ .
+        index @ 1 + index !
+    end
+end

@@ -36,6 +36,7 @@ typedef enum {
   OP_STORE,
   OP_FETCH,
   OP_PROC,
+  OP_ARR,
   OP_COUNT,
 } Token_Op;
 
@@ -50,6 +51,7 @@ typedef struct {
   String_View lexeme;
   Token_Op op;
   Type type;
+  int num;
   int cross_ref;
   void *data;
 } Token;
