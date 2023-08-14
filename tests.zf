@@ -1,0 +1,53 @@
+proc fact1
+    int f f !
+    int res
+    1 res !
+    while f @ 0 > do
+        res @ f @ * res !
+        f @ 1 - f !
+    end
+    res @
+end
+
+proc rot
+    int a int b int c
+    a ! b ! c !
+    b @ a @ c @
+end
+
+proc over
+    int a int b
+    a ! b !
+    b @ a @ b @
+end
+
+proc fact2
+    1 swap
+    fact2aux
+end
+
+proc store
+    int ptr
+    ptr !
+    ptr @ !
+    ptr @
+end
+
+
+proc fetch
+
+end
+
+proc fact2aux
+    int a
+    int b
+    a ! b !
+    a @ 1 > if
+        b @ a @ * b !
+        a @ 1 - a !
+        b @ a @
+        fact2aux
+    end
+    b @
+end
+

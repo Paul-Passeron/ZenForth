@@ -3,10 +3,10 @@
 #define SV_IMPLEMENTATION
 #include "./sv.h"
 
-#define PROG_MAX 100
-#define MAX_PROCS 100
+#define PROG_MAX 200
+#define MAX_PROCS 200
 #define MAX_REC_DEPTH 100
-#define MAX_PROC_NUM 100
+#define MAX_PROC_NUM 200
 typedef struct {
   int col;
   int line;
