@@ -70,6 +70,17 @@ int <name_of_variable>
 # store the value on top of the stack in the variable:
 <name_of_variable> !
 
+#define an array of integers
+arr <array_length> int <var_name>
+
+# Access array elements (push elem pointer on the stack)
+<array name> <index> 16 * -
+
+# Define a procedure
+proc <name of procedure>
+    <code>
+end
+
 # Be careful, scope rules apply for variables, like in any other language.
 ```
 
@@ -77,15 +88,22 @@ int <name_of_variable>
 Example: Programs that prints the digit of a number in reverse order:
 (prog.zf)
 ```
-int number
+proc main
+    int number
 
-123456 number !
+    123456 number !
 
-while number @ 0 > do
-    number @ 10 % .
-    number @ 10 / number !
+    while number @ 0 > do
+        number @ 10 % .
+        number @ 10 / number !
+    end
 end
 ```
 
 ## Notes
-- When procedures will be availaible, you certainly won't be able to access any kind of global variables (except maybe some marked as such), only the stack. Parameters are pushed onto the stack by the caller.
+- Inside procedures, you can't access any kind of global variables for the moment (at one point, you might with some marked as such), only the stack. Parameters are pushed onto the stack by the caller.
+- For the moment, array length must be an integer pushed on the stack as the memory management system needs its size to be known at compile time. If you understand how memory is managed in zf, you can use expressions in-between 'arr' and 'int' keywords but results aren't guaranteed. Maybe a simulation mode will be needed in the future in order to know array sizes at compile time.
+- TODO: find a way to include files
+- Soon, a small standard library will make it possible to write such a thing: ```<arr name> <index> at``` to get the pointer to the element at the index.
+- You cannot define nested procedures but you can define recursive and mutually recursive procedures.
+- The entry point of the program is the main procedure so you must write all your code that is not a procedure inside of the 'main' procedure.
