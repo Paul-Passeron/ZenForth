@@ -705,14 +705,14 @@ int get_var_index(Program vars, String_View name)
     // print_prog(vars);
     // printf("________\n");
     Token tok;
-    int l = vars.length;
+    // int l = vars.length;
     int res = 0;
     while (vars.length > 0)
     {
         tok = pop(&vars);
         if (sv_eq(tok.lexeme, name))
         {
-            return l - res - 1;
+            return res;
         }
         res++;
     }
@@ -743,7 +743,7 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
     // int_stack loc_var_sizes;
     int_stack loc_var_n;
     Program loc_vars;
-    int scope_size = 8;
+    int scope_size = 16;
     // loc_var_sizes.l = 0;
     loc_var_n.l = 0;
     loc_vars.length = 0;
@@ -797,55 +797,42 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
                 if (!sv_in_arr(tok.lexeme, names, l))
                 {
 
-                    if (!in_buff)
+                    if (var_type == TYPE_INT)
                     {
-                        if (var_type == TYPE_INT)
+                        if (!in_buff)
                         {
-                            // int_push(&loc_var_sizes, 16);
                             fprintf(out, "    ;; Declare local variable " SV_Fmt "\n", SV_Arg(tok.lexeme));
-                            fprintf(out, "    push rbx\n");
-                            fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
-                            fprintf(out, "    add rbx, %d\n", 16);
-                            fprintf(out, "    mov [scope_stack_rsp], rbx\n");
-
-                            fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
-                            fprintf(out, "    add rbx,  %d\n", scope_size);
-                            fprintf(out, "    mov [scope_sizes_rsp], rbx\n");
-                            fprintf(out, "    mov rax, 1\n");
-                            fprintf(out, "    mov [rbx], rax\n");
-
-                            fprintf(out, "    pop rbx\n");
                         }
-                        in_var = false;
-                        tok.type = var_type;
-                        loc_var_n.data[loc_var_n.l - 1]++;
-                        push(&loc_vars, tok);
-                    }
-                    else
-                    {
-                        if (var_type == TYPE_INT)
+                        else
                         {
-                            // int_push(&loc_var_sizes, 16 * buff_size);
-                            fprintf(out, "    ;; Declare local buffer: " SV_Fmt "\n", SV_Arg(tok.lexeme));
-                            fprintf(out, "    pop rdx\n");
-                            fprintf(out, "    push rbx\n");
-                            fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
-                            fprintf(out, "    add rbx, %d\n", scope_size);
-                            fprintf(out, "    mov [scope_sizes_rsp], rbx\n");
-                            fprintf(out, "    mov [rbx], rdx\n");
-                            fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
-                            fprintf(out, "    mov rax, %d\n", 16);
-                            fprintf(out, "    mul rdx\n");
-                            fprintf(out, "    add rbx, rax\n");
-                            fprintf(out, "    mov [scope_stack_rsp], rbx\n");
-                            fprintf(out, "    pop rbx\n");
+                            fprintf(out, "    ;; Declare local buffer " SV_Fmt "\n", SV_Arg(tok.lexeme));
                         }
-                        in_var = false;
-                        tok.type = var_type;
-                        in_buff = false;
-                        loc_var_n.data[loc_var_n.l - 1]++;
-                        push(&loc_vars, tok);
+                        fprintf(out, "    mov rax, 1\n");
+                        if (in_buff)
+                        {
+                            fprintf(out, "    pop rax\n");
+                        }
+                        fprintf(out, "    push rbx\n");
+                        fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
+                        fprintf(out, "    push rax\n");
+                        fprintf(out, "    mov rax, [rbx]\n");
+                        fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
+                        fprintf(out, "    mov rdx, 16\n");
+                        fprintf(out, "    mul rdx\n");
+                        fprintf(out, "    add rbx, rax\n");
+                        fprintf(out, "    pop rax\n");
+                        fprintf(out, "    mov [scope_stack_rsp], rbx\n");
+                        fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
+                        fprintf(out, "    add rbx, %d\n", scope_size);
+                        fprintf(out, "    mov [scope_sizes_rsp], rbx\n");
+                        fprintf(out, "    mov [rbx], rax\n");
+                        fprintf(out, "    pop rbx\n");
                     }
+                    in_var = false;
+                    in_buff = false;
+                    tok.type = var_type;
+                    loc_var_n.data[loc_var_n.l - 1]++;
+                    push(&loc_vars, tok);
                 }
             }
             else if (!is_sv_num(tok.lexeme) && tok.type != TYPE_BOOL)
@@ -853,18 +840,19 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
                 int var_index = get_var_index(loc_vars, tok.lexeme);
                 printf(SV_Fmt ": %d\n", SV_Arg(tok.lexeme), var_index);
                 fprintf(out, "    ;; PUSH VAR PTR " SV_Fmt "\n", SV_Arg(tok.lexeme));
-                fprintf(out, "    mov rax, 0\n");
-                fprintf(out, "    mov rdx, 16\n");
+                fprintf(out, "    mov rdx, 0\n");
+                fprintf(out, "    mov rax, 16\n");
                 fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
+                fprintf(out, "    sub rbx, %d\n", scope_size);
+
                 for (int off = 0; off < var_index; ++off)
                 {
-                    fprintf(out, "    add rax, [rbx]\n");
+                    fprintf(out, "    add rdx, [rbx]\n");
                     fprintf(out, "    sub rbx, %d\n", scope_size);
                 }
                 fprintf(out, "    mul rdx\n");
                 fprintf(out, "    mov rbx, [scope_stack_rsp]\n");
                 fprintf(out, "    sub rbx, rax\n");
-                // fprintf(out, "    sub rbx, %d\n", scope_offset);
                 fprintf(out, "    push rbx\n");
             }
             else
@@ -968,8 +956,8 @@ int write_asm(Program prog, FILE *out, String_View *names, int l)
             fprintf(out, "    mov rbx, [scope_sizes_rsp]\n");
             for (int var_index = 0; var_index < count; ++var_index)
             {
-                fprintf(out, "    add rax, [rbx]\n");
                 fprintf(out, "    sub rbx, %d\n", scope_size);
+                fprintf(out, "    add rax, [rbx]\n");
                 pop(&loc_vars);
             }
             fprintf(out, "    mov [scope_sizes_rsp], rbx\n");
@@ -1042,6 +1030,8 @@ int compile(Program src, char *filename)
     {
         Program proc = procs.progs[i];
         String_View proc_name = proc.toks[1].lexeme;
+
+        printf("proc_" SV_Fmt ":\n", SV_Arg(proc_name));
         fprintf(out, "proc_" SV_Fmt ":\n", SV_Arg(proc_name));
         fprintf(out, "    mov [ret_stack_rsp], rsp\n");
         fprintf(out, "    mov rsp, rax\n");
@@ -1077,11 +1067,11 @@ int compile(Program src, char *filename)
 
     fprintf(out, "scope_stack_rsp: rq 1\n");
     fprintf(out, "scope_stack: rb %d\n", max_loc_var * MAX_REC_DEPTH);
-    fprintf(out, "scope_stack_end: rb 0\n");
+    fprintf(out, "scope_stack_end: rb 1 \n");
 
     fprintf(out, "scope_sizes_rsp: rq 1\n");
     fprintf(out, "scope_sizes: rb %d\n", max_loc_var * MAX_REC_DEPTH);
-    fprintf(out, "scope_sizes_end: rb 0\n");
+    fprintf(out, "scope_sizes_end: rb 1\n");
     fclose(out);
     return 0;
 }
