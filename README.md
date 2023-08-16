@@ -100,10 +100,14 @@ proc main
 end
 ```
 
+## TODO:
+- Find a way to include files
+- Have better error reporting (add location of tokens)
+- Have type checking available
+- Add standard library
+
 ## Notes
 - Inside procedures, you can't access any kind of global variables for the moment (at one point, you might with some marked as such), only the stack. Parameters are pushed onto the stack by the caller.
-- For the moment, array length must be an integer pushed on the stack as the memory management system needs its size to be known at compile time. If you understand how memory is managed in zf, you can use expressions in-between 'arr' and 'int' keywords but results aren't guaranteed. Maybe a simulation mode will be needed in the future in order to know array sizes at compile time.
-- TODO: find a way to include files
 - Soon, a small standard library will make it possible to write such a thing: ```<arr name> <index> at``` to get the pointer to the element at the index.
 - You cannot define nested procedures but you can define recursive and mutually recursive procedures.
 - The entry point of the program is the main procedure so you must write all your code that is not a procedure inside of the 'main' procedure.
